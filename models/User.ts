@@ -94,6 +94,13 @@ const UserSchema = new Schema(
     /** E-posta doğrulama */
     emailVerified: { type: Boolean, default: false },
     /** Onboarding tamamlandı mı */
+    /** E-posta doğrulama kodu */
+    verificationCode: { type: String, default: null, select: false },
+    verificationCodeExpires: { type: Date, default: null, select: false },
+
+    /** Şifre sıfırlama kodu */
+    resetCode: { type: String, default: null, select: false },
+    resetCodeExpires: { type: Date, default: null, select: false },
     onboarded: { type: Boolean, default: false },
   },
   { timestamps: true }

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { User } from "@/models";
-import { hashPassword, signAccessToken, signRefreshToken } from "@/lib/auth";
+import { hashPassword } from "@/lib/auth";
 import { registerSchema } from "@/lib/validators/auth";
+import { generateCode, codeExpiry } from "@/lib/verificationCode";
+import { sendVerificationEmail } from "@/lib/mail";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,8 +18,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { email, password, username, displayName, birthDate, gender, acceptedTerms, acceptedPrivacy } =
-      parsed.data;
+    const {
+      email,
+      password,
+      username,
+      displayName,
+      birthDate,
+      gender,
+      acceptedTerms,
+      acceptedPrivacy,
+    } = parsed.data;
 
     await connectDB();
 
@@ -28,7 +38,7 @@ export async function POST(req: NextRequest) {
         (1000 * 60 * 60 * 24 * 365.25);
       if (age < 13) {
         return NextResponse.json(
-          { error: "Sahne'yi kullanmak için en az 13 yaşında olmalısınız" },
+          { error: "Tracks'i kullanmak için en az 13 yaşında olmalısınız" },
           { status: 400 }
         );
       }
@@ -55,6 +65,9 @@ export async function POST(req: NextRequest) {
 
     const hashed = await hashPassword(password);
 
+    // Doğrulama kodu üret
+    const code = generateCode();
+
     const user = await User.create({
       email: email.toLowerCase(),
       password: hashed,
@@ -64,27 +77,21 @@ export async function POST(req: NextRequest) {
       gender: gender ?? null,
       acceptedTerms,
       acceptedPrivacy,
+      emailVerified: false,
+      verificationCode: code,
+      verificationCodeExpires: codeExpiry(10),
     });
 
-    const payload = {
-      userId: user._id.toString(),
-      username: user.username,
-      role: user.role,
-    };
+    // Doğrulama kodunu maile gönder
+    await sendVerificationEmail(user.email, code);
 
+    // Token VERMİYORUZ — önce e-posta doğrulanmalı
     return NextResponse.json(
       {
         ok: true,
-        accessToken: signAccessToken(payload),
-        refreshToken: signRefreshToken(payload),
-        user: {
-          id: user._id,
-          username: user.username,
-          displayName: user.displayName,
-          avatar: user.avatar,
-          onboarded: user.onboarded,
-          role: user.role,
-        },
+        requiresVerification: true,
+        email: user.email,
+        message: "Doğrulama kodu e-postana gönderildi",
       },
       { status: 201 }
     );
