@@ -19,7 +19,16 @@ const UserSchema = new Schema(
       minlength: 3,
       maxlength: 20,
     },
-    password: { type: String, required: true, select: false },
+    password: { type: String, default: null, select: false },
+    /** Sosyal giriş kimlikleri */
+    appleId: { type: String, default: null, index: true, sparse: true },
+    googleId: { type: String, default: null, index: true, sparse: true },
+    /** Giriş yöntemi: local, apple, google */
+    authProvider: {
+      type: String,
+      enum: ["local", "apple", "google"],
+      default: "local",
+    },
 
     /** Profil */
     displayName: { type: String, required: true, maxlength: 50 },
