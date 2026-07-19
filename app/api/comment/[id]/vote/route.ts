@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { Comment, CommentVote, Notification } from "@/models";
 import { getAuthUser } from "@/lib/auth";
+import { notify } from "@/lib/notify";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -76,14 +77,14 @@ export async function POST(req: NextRequest, { params }: Params) {
         $inc: value === 1 ? { likeCount: 1 } : { dislikeCount: 1 },
       });
 
-      // Beğeni bildirimi (kendi yorumu değilse)
-      if (value === 1 && comment.userId.toString() !== auth.userId) {
-        await Notification.create({
-          userId: comment.userId,
+      // Beğeni bildirimi (kendine bildirim ve ayar kontrolü notify içinde)
+      if (value === 1) {
+        await notify({
+          userId: comment.userId.toString(),
           type: "comment_like",
           actorId: auth.userId,
           commentId: id,
-          contentId: comment.contentId,
+          contentId: comment.contentId?.toString() ?? null,
         });
       }
     }

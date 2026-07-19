@@ -74,6 +74,7 @@ const UserSchema = new Schema(
       follows: { type: Boolean, default: true },
       commentReplies: { type: Boolean, default: true },
       likes: { type: Boolean, default: true },
+      friendActivity: { type: Boolean, default: true },
     },
 
     /** İstatistikler — denormalize */

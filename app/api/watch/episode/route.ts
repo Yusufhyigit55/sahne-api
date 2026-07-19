@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { EpisodeWatch, Content } from "@/models";
 import { getAuthUser } from "@/lib/auth";
+import { notifyFollowers } from "@/lib/notify";
 import {
   ensureContent,
   recalcSeriesStatus,
@@ -109,6 +110,13 @@ export async function POST(req: NextRequest) {
     if (status === "completed") {
       await logActivity(auth.userId, "completed_series", cid, {
         title: content.titleTr,
+      });
+      // Takipçilere "arkadaşın diziyi bitirdi" bildirimi
+      await notifyFollowers({
+        actorId: auth.userId,
+        type: "friend_watched",
+        contentId: cid,
+        message: content.titleTr ?? "",
       });
     }
 

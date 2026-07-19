@@ -4,6 +4,7 @@ import { Content, WatchRecord, User } from "@/models";
 import { getAuthUser } from "@/lib/auth";
 import { ensureContent, logActivity } from "@/lib/watchLogic";
 import { getMovieDetail } from "@/lib/tmdb";
+import { notifyFollowers } from "@/lib/notify";
 
 export async function POST(req: NextRequest) {
   try {
@@ -90,6 +91,13 @@ export async function POST(req: NextRequest) {
 
       await logActivity(auth.userId, "watched_movie", content._id.toString(), {
         title: content.titleTr,
+      });
+      // Takipçilere "arkadaşın film bitirdi" bildirimi
+      await notifyFollowers({
+        actorId: auth.userId,
+        type: "friend_watched",
+        contentId: content._id.toString(),
+        message: content.titleTr ?? "",
       });
     }
 

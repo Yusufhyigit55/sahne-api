@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db";
 import { Content, WatchRecord, BookProgress, User } from "@/models";
 import { getAuthUser } from "@/lib/auth";
 import { ensureContent, logActivity } from "@/lib/watchLogic";
+import { notifyFollowers } from "@/lib/notify";
 import { getBook } from "@/lib/books";
 
 export async function POST(req: NextRequest) {
@@ -94,6 +95,13 @@ export async function POST(req: NextRequest) {
       });
       await logActivity(auth.userId, "finished_book", content._id.toString(), {
         title: content.titleTr,
+      });
+      // Takipçilere "arkadaşın kitabı bitirdi" bildirimi
+      await notifyFollowers({
+        actorId: auth.userId,
+        type: "friend_watched",
+        contentId: content._id.toString(),
+        message: content.titleTr ?? "",
       });
     }
 

@@ -187,6 +187,8 @@ export async function PATCH(req: NextRequest) {
       if (np.commentReplies != null)
         update["notifPrefs.commentReplies"] = !!np.commentReplies;
       if (np.likes != null) update["notifPrefs.likes"] = !!np.likes;
+      if (np.friendActivity != null)
+        update["notifPrefs.friendActivity"] = !!np.friendActivity;
     }
 
     if (Object.keys(update).length === 0) {

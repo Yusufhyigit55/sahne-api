@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { Follow, User, Block, Notification } from "@/models";
 import { getAuthUser } from "@/lib/auth";
+import { notify } from "@/lib/notify";
 
 /** Takip et / takibi bırak */
 export async function POST(req: NextRequest) {
@@ -90,9 +91,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // Bildirim
-    await Notification.create({
-      userId: target._id,
+    // Bildirim (ayar kontrolü notify içinde)
+    await notify({
+      userId: target._id.toString(),
       type: status === "pending" ? "follow_request" : "follow",
       actorId: auth.userId,
     });
