@@ -1,18 +1,13 @@
 import { OAuth2Client } from "google-auth-library";
 
-const WEB_CLIENT_ID = process.env.GOOGLE_WEB_CLIENT_ID;
-const IOS_CLIENT_ID = process.env.GOOGLE_IOS_CLIENT_ID;
-
-if (!WEB_CLIENT_ID) {
-  throw new Error(".env dosyasında GOOGLE_WEB_CLIENT_ID eksik");
-}
-
 const client = new OAuth2Client();
 
-// Hem web hem iOS client ID'yi geçerli audience olarak kabul et
-const VALID_AUDIENCES = [WEB_CLIENT_ID, IOS_CLIENT_ID].filter(
-  (x): x is string => Boolean(x)
-);
+/** Geçerli audience'ları runtime'da oku (build sırasında değil) */
+function getValidAudiences(): string[] {
+  const web = process.env.GOOGLE_WEB_CLIENT_ID;
+  const ios = process.env.GOOGLE_IOS_CLIENT_ID;
+  return [web, ios].filter((x): x is string => Boolean(x));
+}
 
 export type GoogleTokenPayload = {
   sub: string; // Google user id
@@ -29,9 +24,14 @@ export type GoogleTokenPayload = {
 export async function verifyGoogleToken(
   idToken: string
 ): Promise<GoogleTokenPayload> {
+  const audiences = getValidAudiences();
+  if (audiences.length === 0) {
+    throw new Error("Google client ID yapılandırılmamış");
+  }
+
   const ticket = await client.verifyIdToken({
     idToken,
-    audience: VALID_AUDIENCES,
+    audience: audiences,
   });
 
   const payload = ticket.getPayload();
