@@ -1,4 +1,5 @@
 import { User, Notification, Follow } from "@/models";
+import { sendPush } from "@/lib/push-send";
 
 type NotifType =
   | "follow"
@@ -69,11 +70,37 @@ export async function notify(args: NotifyArgs): Promise<void> {
       episode: args.episode ?? null,
       message: args.message ?? "",
     });
+
+    // Push bildirimi gönder (token varsa + push açıksa)
+    const recipientForPush = await User.findById(userId).select(
+      "pushToken notifPrefs displayName"
+    );
+    if (
+      recipientForPush?.pushToken &&
+      recipientForPush.notifPrefs?.push !== false
+    ) {
+      // Eylemi yapan kişinin adı (varsa)
+      let actorName = "";
+      if (actorId) {
+        const actor = await User.findById(actorId).select(
+          "displayName username"
+        );
+        actorName = actor?.displayName || actor?.username || "Biri";
+      }
+      const { title, body } = pushText(type, actorName, args.message ?? "");
+      await sendPush({
+        token: recipientForPush.pushToken,
+        title,
+        body,
+        data: { type, contentId: args.contentId ?? null },
+      });
+    }
   } catch (err) {
     console.error("Bildirim oluşturma hatası:", err);
     // Bildirim hatası ana işlemi bozmasın
   }
 }
+
 /**
  * Bir kullanıcının kabul edilmiş takipçilerine toplu bildirim gönderir.
  * Arkadaş aktivitesi için (dizi/film/kitap bitirdi).
@@ -107,5 +134,50 @@ export async function notifyFollowers(args: {
     );
   } catch (err) {
     console.error("Takipçi bildirimi hatası:", err);
+  }
+}
+
+/** Bildirim tipine göre push başlık + metni üretir */
+function pushText(
+  type: string,
+  actorName: string,
+  message: string
+): { title: string; body: string } {
+  switch (type) {
+    case "follow":
+      return { title: "Yeni takipçi", body: `${actorName} seni takip etti` };
+    case "follow_request":
+      return {
+        title: "Takip isteği",
+        body: `${actorName} takip etmek istiyor`,
+      };
+    case "follow_accepted":
+      return {
+        title: "Takip kabul edildi",
+        body: `${actorName} takip isteğini kabul etti`,
+      };
+    case "comment_like":
+      return { title: "Beğeni", body: `${actorName} yorumunu beğendi` };
+    case "comment_reply":
+      return { title: "Yeni yanıt", body: `${actorName} yorumuna yanıt verdi` };
+    case "friend_watched":
+      return {
+        title: "Arkadaş aktivitesi",
+        body: message
+          ? `${actorName}, "${message}" içeriğini bitirdi`
+          : `${actorName} bir içerik bitirdi`,
+      };
+    case "friend_commented":
+      return {
+        title: "Arkadaş aktivitesi",
+        body: `${actorName} yorum yaptı`,
+      };
+    case "new_episode":
+      return {
+        title: "Yeni bölüm",
+        body: message || "Takip ettiğin dizinin yeni bölümü çıktı",
+      };
+    default:
+      return { title: "Tracks", body: message || "Yeni bir bildirimin var" };
   }
 }
