@@ -117,7 +117,32 @@ export async function GET(req: NextRequest, { params }: Params) {
             ? f.contentId.posterPath
             : IMG.poster(f.contentId.posterPath),
       }));
+    // Son izlenenler (watchedAt'e göre en yeni) — sadece detay görülebiliyorsa
+    let recentItems: any[] = [];
+    if (canSeeDetails) {
+      const recent = await WatchRecord.find({
+        userId: u._id,
+        isHidden: false,
+        status: { $in: ["completed", "watching", "up_to_date"] },
+        watchedAt: { $ne: null },
+      })
+        .sort({ watchedAt: -1 })
+        .limit(12)
+        .populate("contentId", "type tmdbId googleBooksId titleTr posterPath")
+        .lean();
 
+      recentItems = (recent as any[])
+        .filter((r) => r.contentId)
+        .map((r) => ({
+          type: r.contentId.type,
+          id: r.contentId.tmdbId ?? r.contentId.googleBooksId,
+          titleTr: r.contentId.titleTr,
+          poster:
+            r.contentId.type === "book"
+              ? r.contentId.posterPath
+              : IMG.poster(r.contentId.posterPath),
+        }));
+    }
     const commentCount = await Comment.countDocuments({
       userId: u._id,
       isDeleted: false,
@@ -139,6 +164,7 @@ export async function GET(req: NextRequest, { params }: Params) {
           : null,
         streak: showStats ? u.streak : null,
         favorites: favItems,
+        recentlyWatched: recentItems,
       },
       locked: false,
     });
