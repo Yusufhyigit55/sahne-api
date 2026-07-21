@@ -4,6 +4,36 @@ import { getBook } from "@/lib/books";
 import { cacheGet, cacheSet } from "@/lib/cache";
 
 type ContentType = "series" | "movie" | "book";
+/**
+ * TMDB dizi detayından GERÇEK yayınlanmış bölüm sayısını hesaplar.
+ * last_episode_to_air = yayınlanmış son bölüm. O sezona kadarki sezonların
+ * episode_count toplamı + son sezonda yayınlanan bölüm = aired.
+ * "Special" (season_number 0) sezonları hariç tutar.
+ */
+function computeAiredEpisodes(detail: any): number {
+  const last = detail.last_episode_to_air;
+  if (!last || typeof last.season_number !== "number") {
+    // Veri yoksa toplam bölüme düş (eski davranış)
+    return detail.number_of_episodes ?? 0;
+  }
+
+  const seasons: any[] = Array.isArray(detail.seasons) ? detail.seasons : [];
+  const lastSeason = last.season_number;
+  const lastEp = last.episode_number ?? 0;
+
+  let aired = 0;
+  for (const s of seasons) {
+    if (s.season_number == null || s.season_number === 0) continue; // özel sezon atla
+    if (s.season_number < lastSeason) {
+      aired += s.episode_count ?? 0;
+    } else if (s.season_number === lastSeason) {
+      aired += lastEp; // son yayınlanan sezonda buraya kadar yayınlandı
+    }
+    // lastSeason'dan büyük sezonlar henüz yayınlanmadı
+  }
+
+  return aired > 0 ? aired : detail.number_of_episodes ?? 0;
+}
 
 /** İçerik DB'de yoksa oluşturur. ÖNBELLEKLİ — aynı içerik tekrar sorgulanmaz. */
 export async function ensureContent(
@@ -42,6 +72,7 @@ export async function ensureContent(
         : null,
       totalEpisodes: detail.number_of_episodes ?? 0,
       totalSeasons: detail.number_of_seasons ?? 0,
+      airedEpisodes: computeAiredEpisodes(detail),
       isEnded: ["Ended", "Canceled"].includes(detail.status),
       genres: Array.isArray(detail.genres)
         ? detail.genres.map((g: any) => g.name).filter(Boolean)
@@ -97,7 +128,26 @@ export async function recalcSeriesStatus(userId: string, contentId: string) {
   if (record?.manualOverride) return record.status;
 
   const watched = await EpisodeWatch.countDocuments({ userId, contentId });
-  const aired = content.totalEpisodes ?? 0;
+
+  // airedEpisodes eksikse (eski kayıt) TMDB'den bir kez hesapla ve kaydet (lazy migration)
+  let airedEpisodes = content.airedEpisodes ?? 0;
+  if (!airedEpisodes && content.tmdbId) {
+    try {
+      const detail = await getTvDetail(content.tmdbId);
+      airedEpisodes = computeAiredEpisodes(detail);
+      if (airedEpisodes > 0) {
+        content.airedEpisodes = airedEpisodes;
+        await content.save();
+      }
+    } catch {
+      // TMDB erişilemezse totalEpisodes'a düşeriz
+    }
+  }
+
+  // Yayınlanmış bölüm sayısı (güvenilir). Yoksa totalEpisodes'a düş.
+  const aired = airedEpisodes && airedEpisodes > 0
+    ? airedEpisodes
+    : content.totalEpisodes ?? 0;
   const isEnded = content.isEnded ?? false;
 
   let status: string;

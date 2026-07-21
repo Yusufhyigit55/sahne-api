@@ -29,6 +29,7 @@ const ContentSchema = new Schema(
 
     // Dizi/film özel
     totalEpisodes: { type: Number, default: 0 },
+    airedEpisodes: { type: Number, default: 0 },
     totalSeasons: { type: Number, default: 0 },
     isEnded: { type: Boolean, default: false },
     runtime: { type: Number, default: 0 },
