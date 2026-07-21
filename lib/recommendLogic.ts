@@ -87,15 +87,29 @@ export async function getUserLikes(userId: string): Promise<UserLike[]> {
 
   return (records as any[])
     .filter((r) => r.contentId?.tmdbId && r.contentId.type !== "book")
-    .map((r) => ({
-      type: r.contentId.type,
-      tmdbId: r.contentId.tmdbId,
-      titleTr: r.contentId.titleTr,
-      rating: r.rating,
-      isFavorite: r.isFavorite,
-    }));
-}
+    .map((r) => {
+      // Beğeni gücü: favori en güçlü, sonra yüksek puan, beğeni, sadece tamamlama en zayıf
+      let weight = 1;
+      if (r.isFavorite) weight = 4;
+      else if (r.rating != null && r.rating >= 9) weight = 3.5;
+      else if (r.rating != null && r.rating >= 7) weight = 2.5;
+      else if (r.isLiked) weight = 2;
+      else if (r.status === "completed") weight = 1; // bitirdi ama sinyal zayıf
+      // Beğenmediyse (düşük puan / dislike) öneriye hiç girmesin
+      if (r.rating != null && r.rating <= 4) weight = 0;
+      if (r.isDisliked) weight = 0;
 
+      return {
+        type: r.contentId.type,
+        tmdbId: r.contentId.tmdbId,
+        titleTr: r.contentId.titleTr,
+        rating: r.rating,
+        isFavorite: r.isFavorite,
+        weight,
+      };
+    })
+    .filter((l) => l.weight > 0);
+}
 /** Görülmüş/gizlenmiş içerikler */
 export async function getUserSeen(userId: string): Promise<Set<string>> {
   const [records, dismissed] = await Promise.all([

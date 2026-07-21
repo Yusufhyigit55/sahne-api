@@ -41,17 +41,22 @@ async function tmdbFetch(path: string, params: Record<string, string> = {}) {
 
 /** Bir kullanıcının beğendiklerinden tür sayımı çıkar (TMDB'den) */
 async function getGenreProfile(
-  likes: { type: "series" | "movie"; tmdbId: number }[]
+  likes: { type: "series" | "movie"; tmdbId: number; weight?: number }[]
 ): Promise<Map<number, number>> {
   const counts = new Map<number, number>();
-  for (const like of likes.slice(0, 15)) {
+  // En sevilenler önce işlensin (ağırlığa göre sırala, ilk 20)
+  const sorted = [...likes]
+    .sort((a, b) => (b.weight ?? 1) - (a.weight ?? 1))
+    .slice(0, 20);
+  for (const like of sorted) {
     try {
       const detail =
         like.type === "series"
           ? await getTvDetail(like.tmdbId)
           : await getMovieDetail(like.tmdbId);
+      const w = like.weight ?? 1;
       for (const g of detail.genres ?? []) {
-        counts.set(g.id, (counts.get(g.id) ?? 0) + 1);
+        counts.set(g.id, (counts.get(g.id) ?? 0) + w);
       }
     } catch {
       continue;

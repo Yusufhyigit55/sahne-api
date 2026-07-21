@@ -24,9 +24,8 @@ export async function GET(
     const other = await User.findOne({
       username: username.toLowerCase(),
     })
-      .select("_id username displayName avatar statsPublic")
+      .select("_id username displayName avatar statsPublic isPrivate")
       .lean();
-
     if (!other) {
       return NextResponse.json(
         { error: "Kullanıcı bulunamadı" },
@@ -36,6 +35,21 @@ export async function GET(
 
     const o = other as any;
 
+    // Gizli hesap: takip etmiyorsan "Birlikte Ne İzleyelim" çalışmaz
+    if (o.isPrivate && o._id.toString() !== auth.userId) {
+      const { Follow } = await import("@/models");
+      const follows = await Follow.findOne({
+        followerId: auth.userId,
+        followingId: o._id,
+        status: "accepted",
+      });
+      if (!follows) {
+        return NextResponse.json(
+          { error: "Bu özellik gizli hesaplarda kullanılamaz", locked: true },
+          { status: 403 }
+        );
+      }
+    }
     // Kendisiyle karşılaştıramaz
     if (o._id.toString() === auth.userId) {
       return NextResponse.json(
