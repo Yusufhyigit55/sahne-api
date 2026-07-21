@@ -34,6 +34,8 @@ const WatchRecordSchema = new Schema(
 
     // Değerlendirme
     rating: { type: Number, min: 1, max: 10, default: null },
+    // Film "nasıl hissettim" tepkileri (dizi bölümleri EpisodeReview kullanır)
+    reactions: { type: [String], default: [] },
     isLiked: { type: Boolean, default: false },
     isDisliked: { type: Boolean, default: false },
     isFavorite: { type: Boolean, default: false },

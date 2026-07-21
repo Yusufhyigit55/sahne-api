@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     }
 
     // status: "completed" | "watchlist" | "dropped"
-    const { tmdbId, status, watchedAt, isApproximate, stoppedAtMinute } =
+    const { tmdbId, status, watchedAt, isApproximate, stoppedAtMinute, rating, reactions } =
       await req.json();
 
     if (!tmdbId) {
@@ -72,6 +72,8 @@ export async function POST(req: NextRequest) {
           isApproximateDate: !!isApproximate,
           stoppedAtMinute: stoppedAtMinute ?? null,
           manualOverride: true,
+          ...(rating != null ? { rating: Number(rating) } : {}),
+          ...(Array.isArray(reactions) ? { reactions } : {}),
         },
       },
       { upsert: true, returnDocument: "after" }

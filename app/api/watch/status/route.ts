@@ -54,6 +54,7 @@ export async function GET(req: NextRequest) {
         ? {
             status: record.status,
             rating: record.rating,
+            reactions: record.reactions ?? [],
             isLiked: record.isLiked,
             isDisliked: record.isDisliked,
             isFavorite: record.isFavorite,
