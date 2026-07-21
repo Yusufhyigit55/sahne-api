@@ -55,6 +55,7 @@ export async function GET(req: NextRequest) {
             status: record.status,
             rating: record.rating,
             reactions: record.reactions ?? [],
+            stoppedAtMinute: record.stoppedAtMinute ?? null,
             isLiked: record.isLiked,
             isDisliked: record.isDisliked,
             isFavorite: record.isFavorite,
