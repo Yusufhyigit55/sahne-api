@@ -46,10 +46,11 @@ export async function GET(req: NextRequest) {
     if (tab === "favorites") {
       filter.isFavorite = true;
     } else if (tab === "watchlist") {
+      // Geriye uyumluluk: eski "watchlist" tab'ı hâlâ çalışsın
       filter.status = "watchlist";
     } else {
-      // İzlenenler: watchlist ve none hariç
-      filter.status = { $nin: ["watchlist", "none"] };
+      // Kütüphanem: watchlist DAHİL tüm gerçek durumlar (sadece "none" hariç)
+      filter.status = { $ne: "none" };
     }
 
     // Durum filtresi

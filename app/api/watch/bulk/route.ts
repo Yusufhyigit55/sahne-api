@@ -17,8 +17,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Giriş gerekli" }, { status: 401 });
     }
 
-    // scope: "season" | "all"
-    const { tmdbId, season, scope, watchedAt, isApproximate } =
+    // scope: "season" | "all" | "upto" (belirli sezonda X. bölüme kadar)
+    const { tmdbId, season, episode, scope, watchedAt, isApproximate } =
       await req.json();
 
     if (!tmdbId || !scope) {
@@ -36,8 +36,7 @@ export async function POST(req: NextRequest) {
     const date = watchedAt ? new Date(watchedAt) : new Date();
 
     let seasons: number[] = [];
-
-    if (scope === "season") {
+    if (scope === "season" || scope === "upto") {
       if (!season) {
         return NextResponse.json({ error: "season gerekli" }, { status: 400 });
       }
@@ -54,9 +53,14 @@ export async function POST(req: NextRequest) {
     for (const sn of seasons) {
       const seasonData = await getSeason(Number(tmdbId), sn);
 
-      const aired = (seasonData.episodes ?? []).filter(
-        (e: any) => e.air_date && e.air_date <= today
-      );
+      const aired = (seasonData.episodes ?? []).filter((e: any) => {
+        if (!e.air_date || e.air_date > today) return false;
+        // "upto": sadece hedef bölüme kadar (ve dahil) olanları işaretle
+        if (scope === "upto" && season && sn === Number(season)) {
+          return e.episode_number <= Number(episode);
+        }
+        return true;
+      });
 
       const docs = aired.map((e: any) => ({
         userId: auth.userId,
