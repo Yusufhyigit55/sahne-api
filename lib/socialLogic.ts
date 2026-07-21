@@ -69,7 +69,6 @@ export async function getCompatibility(
   for (const r of mine as any[]) {
     if (!r.contentId) continue;
     myMap.set(r.contentId._id.toString(), r);
-
     for (const g of r.contentId.genres ?? []) {
       myGenres.set(g, (myGenres.get(g) ?? 0) + 1);
     }
@@ -80,10 +79,11 @@ export async function getCompatibility(
 
   let ratingDiffSum = 0;
   let ratingPairs = 0;
+  let reactionMatchBonus = 0;
+  let bothFavorite = 0;
 
   for (const r of theirs as any[]) {
     if (!r.contentId) continue;
-
     const cid = r.contentId._id.toString();
 
     for (const g of r.contentId.genres ?? []) {
@@ -94,7 +94,6 @@ export async function getCompatibility(
     if (!myRec) continue;
 
     const c = r.contentId;
-
     shared.push({
       type: c.type,
       id: c.tmdbId ?? c.googleBooksId,
@@ -109,10 +108,20 @@ export async function getCompatibility(
       ratingDiffSum += Math.abs(myRec.rating - r.rating);
       ratingPairs++;
     }
+
+    // Reaksiyon örtüşmesi — ortak içerikte aynı reaksiyonu verdiyseniz bonus
+    const myReactions: string[] = myRec.reactions ?? [];
+    const theirReactions: string[] = r.reactions ?? [];
+    if (myReactions.length && theirReactions.length) {
+      const inter = myReactions.filter((x) => theirReactions.includes(x));
+      if (inter.length > 0) reactionMatchBonus += 1;
+    }
+
+    // İkinizin de favorisi
+    if (myRec.isFavorite && r.isFavorite) bothFavorite += 1;
   }
 
   const sharedCount = shared.length;
-
   const myTotal = myMap.size;
   const theirTotal = (theirs as any[]).filter((r) => r.contentId).length;
 
@@ -126,36 +135,43 @@ export async function getCompatibility(
     };
   }
 
-  // 1) Örtüşme oranı — Jaccard (%50 ağırlık)
-  const union = myTotal + theirTotal - sharedCount;
-  const overlap = union > 0 ? sharedCount / union : 0;
+  // 1) Örtüşme — küçük olanın kaçını paylaşıyorsunuz (overlap coefficient).
+  // Jaccard yerine bunu kullanıyoruz: aktif kullanıcılar cezalanmasın.
+  const smaller = Math.min(myTotal, theirTotal);
+  const overlap = smaller > 0 ? sharedCount / smaller : 0;
 
-  // 2) Puan yakınlığı (%30 ağırlık)
-  // Ortalama fark 0 → 1.0, ortalama fark 9 → 0.0
+  // 2) Puan yakınlığı — ortalama fark 0 → 1.0, fark 9 → 0.0
   const ratingSim =
     ratingPairs > 0 ? Math.max(0, 1 - ratingDiffSum / ratingPairs / 9) : 0.5;
 
-  // 3) Tür örtüşmesi (%20 ağırlık)
+  // 3) Tür örtüşmesi
   const myTopGenres = new Set(
-    [...myGenres.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([g]) => g)
+    [...myGenres.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([g]) => g)
   );
-
   const theirTopGenres = [...theirGenres.entries()]
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
     .map(([g]) => g);
-
   const sharedGenres = theirTopGenres.filter((g) => myTopGenres.has(g));
   const genreSim = myTopGenres.size > 0 ? sharedGenres.length / 5 : 0;
 
-  const score = Math.round(
-    (overlap * 0.5 + ratingSim * 0.3 + genreSim * 0.2) * 100
-  );
+  // 4) Bonuslar — reaksiyon ve ortak favori (normalize, küçük katkı)
+  const reactionSim =
+    sharedCount > 0 ? Math.min(1, reactionMatchBonus / sharedCount) : 0;
+  const favoriteBonus = Math.min(0.1, bothFavorite * 0.05); // max +%10
 
-  // En yüksek puanlıları öne al
+  // Ham skor: örtüşme %35 + puan yakınlığı %35 + tür %20 + reaksiyon %10 (+favori bonus)
+  let raw =
+    overlap * 0.35 + ratingSim * 0.35 + genreSim * 0.2 + reactionSim * 0.1;
+  raw = Math.min(1, raw + favoriteBonus);
+
+  // 5) Güven faktörü — az ortak içerikte skoru törpüle (yanıltıcı yüksek skor olmasın).
+  // 1 ortak → %55, 3 ortak → %80, 5+ ortak → tam güven.
+  const confidence = Math.min(1, 0.4 + sharedCount * 0.12);
+
+  const score = Math.round(raw * confidence * 100);
+
+  // Ortak favori + yüksek puanlıları öne al
   shared.sort((a, b) => {
     const aScore = (a.myRating ?? 0) + (a.theirRating ?? 0);
     const bScore = (b.myRating ?? 0) + (b.theirRating ?? 0);
@@ -170,12 +186,8 @@ export async function getCompatibility(
     verdict: verdictFor(score, sharedCount),
   };
 }
-
-/**
- * Kullanıcı önerisi.
- * Benzer içerik izleyen, henüz takip etmediğin kullanıcılar.
- */
 export async function getSuggestedUsers(
+
   userId: string,
   limit = 10
 ): Promise<SuggestedUser[]> {
