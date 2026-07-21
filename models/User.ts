@@ -62,7 +62,7 @@ const UserSchema = new Schema(
     },
 
     /** Gizlilik */
-    isPrivate: { type: Boolean, default: true },
+    isPrivate: { type: Boolean, default: false },
     activityHidden: { type: Boolean, default: false },
     statsPublic: { type: Boolean, default: true },
 
