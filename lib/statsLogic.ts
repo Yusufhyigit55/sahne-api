@@ -17,6 +17,12 @@ export type MonthPoint = { label: string; value: number };
 export type GenreCount = { name: string; count: number };
 /** Puan dağılımı satırı */
 export type RatedItem = { title: string; rating: number };
+/** En sık favori seçilen karakter */
+export type TopCharacter = {
+  characterName: string;
+  actorName: string;
+  count: number;
+};
 
 /** Tek bir medya türü (dizi VEYA film) için istatistik bloğu */
 export type MediaStats = {
@@ -56,6 +62,8 @@ export type UserStats = {
   };
   badges: EarnedBadge[];
   earnedBadgeCount: number;
+  /** En sık favori seçtiği karakterler (ilk 5) */
+  topCharacters: TopCharacter[];
 };
 
 /** Son 12 haftanın ISO hafta etiketlerini (hafta no) döndürür. */
@@ -277,8 +285,6 @@ export async function getUserStats(userId: string): Promise<UserStats> {
   }
   series.remaining = remaining;
 
-  
-
   // 7) PUANLAR — en yüksek verdiğin puanlar
   const ratedSeries = seriesRecs
     .filter((r) => typeof r.rating === "number")
@@ -305,9 +311,11 @@ export async function getUserStats(userId: string): Promise<UserStats> {
     }
   }
 
-  // 9) KARAKTER OYLARI (dizi/film ayrı)
+  // 9) KARAKTER OYLARI (dizi/film ayrı) + en sık seçilen karakterler
   const sVotedContent = new Set<string>();
   const mVotedContent = new Set<string>();
+  const charCounts = new Map<string, TopCharacter>();
+
   for (const v of cvs) {
     const t = v.contentId?.type;
     const cid = v.contentId?._id?.toString();
@@ -318,9 +326,29 @@ export async function getUserStats(userId: string): Promise<UserStats> {
       movies.characterVotes++;
       if (cid) mVotedContent.add(cid);
     }
+
+    // Karakter adı varsa say (aynı karakter farklı içeriklerde tekrar edebilir)
+    const name = v.characterName?.trim();
+    if (name) {
+      const key = name.toLowerCase();
+      const prev = charCounts.get(key);
+      if (prev) {
+        prev.count++;
+      } else {
+        charCounts.set(key, {
+          characterName: name,
+          actorName: v.actorName ?? "",
+          count: 1,
+        });
+      }
+    }
   }
   series.characterVotedContent = sVotedContent.size;
   movies.characterVotedContent = mVotedContent.size;
+
+  const topCharacters: TopCharacter[] = [...charCounts.values()]
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5);
 
   // 10) ÖZET (profil kartları)
   const watchDates = eps
@@ -365,5 +393,6 @@ export async function getUserStats(userId: string): Promise<UserStats> {
     },
     badges,
     earnedBadgeCount: earnedCount,
+    topCharacters,
   };
 }
