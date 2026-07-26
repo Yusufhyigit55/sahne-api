@@ -14,20 +14,39 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const page = Number(searchParams.get("page") ?? 1);
+    const category = searchParams.get("category"); // "notifications" | "activity" | null(hepsi)
     const limit = 30;
+
+    // Arkadaş etkinliği türleri vs sana-yönelik bildirim türleri
+    const ACTIVITY_TYPES = ["friend_watched", "friend_commented"];
 
     await connectDB();
 
+    // Kategoriye göre tür filtresi
+    const typeFilter: any = {};
+    if (category === "activity") {
+      typeFilter.type = { $in: ACTIVITY_TYPES };
+    } else if (category === "notifications") {
+      typeFilter.type = { $nin: ACTIVITY_TYPES };
+    }
+
+    const baseQuery = { userId: auth.userId, ...typeFilter };
+
     const [notifications, total, unreadCount] = await Promise.all([
-      Notification.find({ userId: auth.userId })
+      Notification.find(baseQuery)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
         .populate("actorId", "username displayName avatar")
         .populate("contentId", "type tmdbId googleBooksId titleTr posterPath")
         .lean(),
-      Notification.countDocuments({ userId: auth.userId }),
-      Notification.countDocuments({ userId: auth.userId, isRead: false }),
+      Notification.countDocuments(baseQuery),
+      // Okunmamış sayısı: sadece sana-yönelik bildirimler (etkinlikler rozet basmasın)
+      Notification.countDocuments({
+        userId: auth.userId,
+        isRead: false,
+        type: { $nin: ACTIVITY_TYPES },
+      }),
     ]);
 
     const items = (notifications as any[]).map((n) => {
