@@ -12,7 +12,9 @@ export async function GET(req: NextRequest) {
 
     await connectDB();
 
-    const user = await User.findById(auth.userId).lean();
+    const user = await User.findById(auth.userId)
+      .select("+password")
+      .lean();
     if (!user) {
       return NextResponse.json({ error: "Kullanıcı bulunamadı" }, { status: 404 });
     }
@@ -44,7 +46,8 @@ export async function GET(req: NextRequest) {
         streak: user.streak,
         onboarded: user.onboarded,
         role: user.role,
-        
+        hasPassword:
+          typeof user.password === "string" && user.password.length > 0,
       },
       ban: activeBan
         ? { reason: activeBan.reason, expiresAt: activeBan.expiresAt }
