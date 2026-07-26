@@ -39,17 +39,24 @@ export async function DELETE(req: NextRequest) {
     }
 
     await connectDB();
-
-    const user = await User.findById(auth.userId).select("+password");
+    const user = await User.findById(auth.userId).select("+password +appleId +googleId");
     if (!user) {
       return NextResponse.json({ error: "Kullanıcı bulunamadı" }, { status: 404 });
     }
 
-    const valid = await comparePassword(password, user.password);
-    if (!valid) {
-      return NextResponse.json({ error: "Şifre hatalı" }, { status: 401 });
-    }
+    // Sosyal giriş (Google/Apple) ile açılan hesaplarda şifre olmayabilir.
+    // Şifre varsa doğrula; yoksa sosyal kimlik yeterli sayılır.
+    const hasPassword =
+      typeof user.password === "string" && user.password.length > 0;
 
+    if (hasPassword) {
+      const valid = await comparePassword(password, user.password);
+      if (!valid) {
+        return NextResponse.json({ error: "Şifre hatalı" }, { status: 401 });
+      }
+    }
+    // hasPassword false ise (sosyal hesap): şifre kontrolü atlanır,
+    // zaten JWT ile kimlik doğrulanmış durumda (getAuthUser).
     const uid = auth.userId;
 
     // Tüm kullanıcı verisini sil
