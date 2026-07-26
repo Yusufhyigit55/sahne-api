@@ -3,9 +3,20 @@ import { connectDB } from "@/lib/db";
 import { User, Ban } from "@/models";
 import { comparePassword, signAccessToken, signRefreshToken } from "@/lib/auth";
 import { loginSchema } from "@/lib/validators/auth";
+import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 60 saniyede 10 giriş denemesi (brute-force koruması)
+    const ip = getClientIp(req);
+    const rl = await checkRateLimit(ip, "auth");
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Çok fazla deneme. Lütfen biraz bekle." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
 
     const parsed = loginSchema.safeParse(body);

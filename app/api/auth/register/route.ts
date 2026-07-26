@@ -5,9 +5,19 @@ import { hashPassword } from "@/lib/auth";
 import { registerSchema } from "@/lib/validators/auth";
 import { generateCode, codeExpiry } from "@/lib/verificationCode";
 import { sendVerificationEmail } from "@/lib/mail";
-
+import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 export async function POST(req: NextRequest) {
   try {
+    // Rate limit: 60 saniyede 10 kayıt denemesi (bot/spam koruması)
+    const ip = getClientIp(req);
+    const rl = await checkRateLimit(ip, "auth");
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Çok fazla deneme. Lütfen biraz bekle." },
+        { status: 429 }
+      );
+    }
+
     const body = await req.json();
 
     const parsed = registerSchema.safeParse(body);
