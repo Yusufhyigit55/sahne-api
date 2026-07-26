@@ -43,6 +43,7 @@ export async function GET(req: NextRequest, { params }: Params) {
         appRating: local?.ratingCount
           ? Number((local.ratingSum / local.ratingCount).toFixed(1))
           : null,
+          appRatingCount: local?.ratingCount ?? 0,
         addedByCount: local?.addedByCount ?? 0,
         likeCount: local?.likeCount ?? 0,
         dislikeCount: local?.dislikeCount ?? 0,
@@ -114,6 +115,7 @@ export async function GET(req: NextRequest, { params }: Params) {
       appRating: local?.ratingCount
         ? Number((local.ratingSum / local.ratingCount).toFixed(1))
         : null,
+        appRatingCount: local?.ratingCount ?? 0,
       addedByCount: local?.addedByCount ?? 0,
       likeCount: local?.likeCount ?? 0,
       dislikeCount: local?.dislikeCount ?? 0,
