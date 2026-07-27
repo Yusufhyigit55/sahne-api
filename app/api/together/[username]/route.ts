@@ -24,7 +24,9 @@ export async function GET(
     const other = await User.findOne({
       username: username.toLowerCase(),
     })
-      .select("_id username displayName avatar statsPublic isPrivate")
+      .select(
+        "_id username displayName avatar statsPublic isPrivate activityHidden"
+      )
       .lean();
     if (!other) {
       return NextResponse.json(
@@ -35,8 +37,24 @@ export async function GET(
 
     const o = other as any;
 
+    // Kendisiyle karşılaştıramaz
+    if (o._id.toString() === auth.userId) {
+      return NextResponse.json(
+        { error: "Kendinle karşılaştıramazsın" },
+        { status: 400 }
+      );
+    }
+
+    // Aktivite gizliyse Birlikte Ne İzleyelim çalışmaz
+    if (o.activityHidden) {
+      return NextResponse.json(
+        { error: "Bu kullanıcının aktivitesi gizli", locked: true },
+        { status: 403 }
+      );
+    }
+
     // Gizli hesap: takip etmiyorsan "Birlikte Ne İzleyelim" çalışmaz
-    if (o.isPrivate && o._id.toString() !== auth.userId) {
+    if (o.isPrivate) {
       const { Follow } = await import("@/models");
       const follows = await Follow.findOne({
         followerId: auth.userId,
@@ -50,15 +68,8 @@ export async function GET(
         );
       }
     }
-    // Kendisiyle karşılaştıramaz
-    if (o._id.toString() === auth.userId) {
-      return NextResponse.json(
-        { error: "Kendinle karşılaştıramazsın" },
-        { status: 400 }
-      );
-    }
 
-    // Önbellekli (kullanıcı çiftine göre, 30 dk)
+    // Önbellekli (kullanıcı çiftine göre, 2 dk)
     const pairKey = [auth.userId, o._id.toString()].sort().join(":");
     const result = await cached(`together:${pairKey}`, 120, () =>
       getTogetherRecommendations(auth.userId, o._id.toString())

@@ -24,21 +24,41 @@ export async function GET(req: NextRequest) {
     const target = await User.findOne({
       username: username.toLowerCase(),
     })
-      .select("_id")
+      .select("_id isPrivate activityHidden")
       .lean();
-
     if (!target) {
       return NextResponse.json(
         { error: "Kullanıcı bulunamadı" },
         { status: 404 }
       );
     }
-
-    const targetId = (target as any)._id.toString();
-
+    const t = target as any;
+    const targetId = t._id.toString();
     // Kendinle uyum yok
     if (targetId === auth.userId) {
       return NextResponse.json({ ok: true, compatibility: null });
+    }
+
+    // Gizlilik kuralları:
+    // 1) Aktivite gizliyse → uyum hesaplanmaz (kimse için)
+    if (t.activityHidden) {
+      return NextResponse.json({ ok: true, compatibility: null, locked: true });
+    }
+    // 2) Gizli hesap + takip etmiyorsan → kapalı
+    if (t.isPrivate) {
+      const { Follow } = await import("@/models");
+      const follows = await Follow.findOne({
+        followerId: auth.userId,
+        followingId: targetId,
+        status: "accepted",
+      });
+      if (!follows) {
+        return NextResponse.json({
+          ok: true,
+          compatibility: null,
+          locked: true,
+        });
+      }
     }
 
     // 10 dk önbellekli

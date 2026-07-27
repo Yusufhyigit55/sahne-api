@@ -95,6 +95,8 @@ export async function GET(req: NextRequest, { params }: Params) {
 
     // İstatistik görünürlüğü
     const showStats = isSelf || u.statsPublic;
+    // Aktivite görünürlüğü: activityHidden açıksa son izlenenler/favoriler gizli
+    const showActivity = isSelf || !u.activityHidden;
 
     // Favoriler
     const favorites = await WatchRecord.find({
@@ -163,8 +165,8 @@ export async function GET(req: NextRequest, { params }: Params) {
             }
           : null,
         streak: showStats ? u.streak : null,
-        favorites: favItems,
-        recentlyWatched: recentItems,
+        favorites: showActivity ? favItems : [],
+        recentlyWatched: showActivity ? recentItems : [],
       },
       locked: false,
     });
