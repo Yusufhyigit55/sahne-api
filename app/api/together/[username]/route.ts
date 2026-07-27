@@ -60,7 +60,7 @@ export async function GET(
 
     // Önbellekli (kullanıcı çiftine göre, 30 dk)
     const pairKey = [auth.userId, o._id.toString()].sort().join(":");
-    const result = await cached(`together:${pairKey}`, 1800, () =>
+    const result = await cached(`together:${pairKey}`, 120, () =>
       getTogetherRecommendations(auth.userId, o._id.toString())
     );
 
