@@ -126,9 +126,8 @@ export async function GET(req: NextRequest, { params }: Params) {
         userId: u._id,
         isHidden: false,
         status: { $in: ["completed", "watching", "up_to_date"] },
-        watchedAt: { $ne: null },
       })
-        .sort({ watchedAt: -1 })
+        .sort({ updatedAt: -1 })
         .limit(12)
         .populate("contentId", "type tmdbId googleBooksId titleTr posterPath")
         .lean();
