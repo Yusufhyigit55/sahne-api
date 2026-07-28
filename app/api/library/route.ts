@@ -146,6 +146,7 @@ export async function GET(req: NextRequest) {
         watchedEpisodes,
         totalEpisodes: c.totalEpisodes ?? 0,
         progress,
+        stoppedAtMinute: r.stoppedAtMinute ?? null,
         updatedAt: r.updatedAt,
       };
     });
