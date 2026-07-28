@@ -25,9 +25,15 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { source, data } = body ?? {};
 
-    if (!source || !["letterboxd", "trakt", "tracks"].includes(source)) {
+    if (
+      !source ||
+      !["letterboxd", "trakt", "tracks", "tvtime"].includes(source)
+    ) {
       return NextResponse.json(
-        { error: "Geçersiz kaynak. letterboxd, trakt veya tracks olmalı" },
+        {
+          error:
+            "Geçersiz kaynak. letterboxd, trakt, tvtime veya tracks olmalı",
+        },
         { status: 400 }
       );
     }

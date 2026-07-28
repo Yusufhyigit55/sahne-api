@@ -176,10 +176,62 @@ export function parseTracksJson(jsonText: string): ImportItem[] {
 
   return items;
 }
+/**
+ * TV TIME (dizi + film)
+ * TV Time GDPR export'u CSV verir (tracking-prod-records.csv / seen_episode.csv).
+ * Bölüm bazlı satırlar; biz dizi/film bazında tekilleştiririz.
+ * Olası sütunlar: series_name / show_name / movie_name, type, created_at.
+ */
+export function parseTVTime(csvText: string): ImportItem[] {
+  const rows = parseCsv(csvText);
+  const seen = new Set<string>();
+  const items: ImportItem[] = [];
 
+  for (const row of rows) {
+    // Dizi adı çeşitli sütun adlarında olabilir
+    const seriesName =
+      row["series_name"] || row["show_name"] || row["tv_show_name"] || "";
+    const movieName = row["movie_name"] || row["film_name"] || "";
+    const genericName = row["name"] || row["title"] || "";
+
+    let type: "series" | "movie";
+    let title: string;
+
+    if (seriesName) {
+      type = "series";
+      title = seriesName;
+    } else if (movieName) {
+      type = "movie";
+      title = movieName;
+    } else if (genericName) {
+      // type sütunu varsa ona bak, yoksa dizi varsay
+      const t = (row["type"] || "").toLowerCase();
+      type = t.includes("movie") || t.includes("film") ? "movie" : "series";
+      title = genericName;
+    } else {
+      continue;
+    }
+
+    // Aynı içeriği bir kez ekle (bölüm bazlı satırları tekilleştir)
+    const key = `${type}:${title.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    items.push({
+      type,
+      title,
+      year: toYear(row["year"] || row["release_year"]),
+      watchedAt:
+        row["created_at"] || row["watched_at"] || row["date"] || null,
+      status: "completed",
+    });
+  }
+
+  return items;
+}
 /** Kaynak adına göre doğru parser'ı seçer */
 export function parseBySource(
-  source: "letterboxd" | "trakt" | "tracks",
+  source: "letterboxd" | "trakt" | "tracks" | "tvtime",
   text: string
 ): ImportItem[] {
   switch (source) {
@@ -189,6 +241,8 @@ export function parseBySource(
       return parseTrakt(text);
     case "tracks":
       return parseTracksJson(text);
+    case "tvtime":
+      return parseTVTime(text);
     default:
       return [];
   }
