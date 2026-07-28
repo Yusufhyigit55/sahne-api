@@ -3,9 +3,18 @@ import { connectDB } from "@/lib/db";
 import { User } from "@/models";
 import { hashPassword } from "@/lib/auth";
 import { isCodeValid } from "@/lib/verificationCode";
+import { checkRateLimit, getClientIp } from "@/lib/ratelimit";
 
 export async function POST(req: NextRequest) {
   try {
+    const ip = getClientIp(req);
+    const rl = await checkRateLimit(ip, "auth");
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Çok fazla deneme. Lütfen biraz bekle." },
+        { status: 429 }
+      );
+    }
     const body = await req.json();
     const { email, code, newPassword } = body ?? {};
 
