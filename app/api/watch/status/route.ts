@@ -52,8 +52,7 @@ export async function GET(req: NextRequest) {
     const seasonProgress: Record<number, number> = {};
     if (type === "series") {
       const agg = await EpisodeWatch.aggregate([
-        { $match: { userId: content._id ? auth.userId : auth.userId, contentId: content._id } },
-        { $group: { _id: "$season", count: { $sum: 1 } } },
+       { $match: { userId: auth.userId, contentId: content._id } },        { $group: { _id: "$season", count: { $sum: 1 } } },
       ]);
       for (const row of agg as any[]) {
         if (row._id != null) seasonProgress[row._id] = row.count;

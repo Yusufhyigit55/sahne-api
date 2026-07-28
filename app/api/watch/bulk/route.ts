@@ -35,6 +35,30 @@ export async function POST(req: NextRequest) {
     const today = new Date().toISOString().slice(0, 10);
     const date = watchedAt ? new Date(watchedAt) : new Date();
 
+    // Sezon işaretini kaldır: o sezonun tüm bölüm kayıtlarını sil
+    if (scope === "season-remove") {
+      if (!season) {
+        return NextResponse.json({ error: "season gerekli" }, { status: 400 });
+      }
+      const del = await EpisodeWatch.deleteMany({
+        userId: auth.userId,
+        contentId: content._id,
+        season: Number(season),
+      });
+      const totalWatched = await EpisodeWatch.countDocuments({
+        userId: auth.userId,
+        contentId: content._id,
+      });
+      const status = await recalcSeriesStatus(auth.userId, cid);
+      await recalcUserStats(auth.userId);
+      return NextResponse.json({
+        ok: true,
+        removed: del.deletedCount,
+        totalWatched,
+        status,
+      });
+    }
+
     let seasons: number[] = [];
     if (scope === "season" || scope === "upto") {
       if (!season) {
