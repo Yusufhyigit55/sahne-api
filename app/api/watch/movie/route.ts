@@ -106,6 +106,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       status: record.status,
+      rating: record.rating ?? null,
+      reactions: record.reactions ?? [],
     });
   } catch (err) {
     console.error("Film işaretleme hatası:", err);
