@@ -280,3 +280,83 @@ export async function getSuggestedUsers(
 
   return items.sort((a, b) => b.compatibility - a.compatibility);
 }
+/** Takip edilenlerin son 7 günde en çok izlediği içerikler (trend özeti) */
+export async function getFriendsTrending(userId: string, limit = 8) {
+  // 1) Takip edilenler
+  const follows = await Follow.find({ followerId: userId })
+    .select("followingId")
+    .lean();
+  const followingIds = (follows as any[]).map((f) => f.followingId);
+  if (followingIds.length === 0) return [];
+
+  // 2) Son 7 gün, takip edilenlerin tamamladığı içerikler → içeriğe göre grupla
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const grouped = await WatchRecord.aggregate([
+    {
+      $match: {
+        userId: { $in: followingIds },
+        status: "completed",
+        updatedAt: { $gte: weekAgo },
+      },
+    },
+    {
+      $group: {
+        _id: "$contentId",
+        friendIds: { $addToSet: "$userId" }, // benzersiz arkadaşlar
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        friendCount: { $size: "$friendIds" },
+        friendIds: 1,
+      },
+    },
+    { $sort: { friendCount: -1 } },
+    { $limit: limit },
+  ]);
+
+  if (grouped.length === 0) return [];
+
+  // 3) İçerik detayları
+  const contentIds = grouped.map((g: any) => g._id);
+  const contents = await Content.find({ _id: { $in: contentIds } })
+    .select("_id type tmdbId titleTr posterPath")
+    .lean();
+  const contentMap = new Map(
+    (contents as any[]).map((c) => [c._id.toString(), c])
+  );
+
+  // 4) Arkadaş avatarları (ilk 3)
+  const allFriendIds = [
+    ...new Set(grouped.flatMap((g: any) => g.friendIds.map((id: any) => id.toString()))),
+  ];
+  const friends = await User.find({ _id: { $in: allFriendIds } })
+    .select("_id displayName avatar username")
+    .lean();
+  const friendMap = new Map(
+    (friends as any[]).map((f) => [f._id.toString(), f])
+  );
+
+  return grouped
+    .map((g: any) => {
+      const c = contentMap.get(g._id.toString());
+      if (!c) return null;
+      const avatars = g.friendIds
+        .slice(0, 3)
+        .map((id: any) => {
+          const f = friendMap.get(id.toString());
+          return f ? { avatar: f.avatar, displayName: f.displayName } : null;
+        })
+        .filter(Boolean);
+      return {
+        type: c.type,
+        id: c.tmdbId,
+        titleTr: c.titleTr,
+        poster: c.type === "book" ? c.posterPath : IMG.poster(c.posterPath),
+        friendCount: g.friendCount,
+        friends: avatars,
+      };
+    })
+    .filter(Boolean);
+}
