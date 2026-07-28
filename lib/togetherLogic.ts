@@ -142,8 +142,10 @@ export async function getTogetherRecommendations(
   if (commonGenreIds.length > 0) {
     const genreKey = commonGenreIds.map((g) => g.id).join(",");
 
+    // Her tür için ayrı hedef (dizi de gelsin, film baskın olmasın)
+    const perType = Math.ceil(limit / 2);
     for (const type of ["series", "movie"] as const) {
-      if (recommendations.length >= limit) break;
+      let addedForType = 0;
       try {
         const tmdbType = type === "series" ? "tv" : "movie";
         const data = await cached(
@@ -151,19 +153,20 @@ export async function getTogetherRecommendations(
           3600,
           () =>
             tmdbFetch(`/discover/${tmdbType}`, {
-              with_genres: genreKey,
-              sort_by: "vote_average.desc",
-              "vote_count.gte": "500",
-              "vote_average.gte": "7.5",
+              // Film tür ID'leri dizi discover'da eşleşmez → dizi için tür filtresi uygulama
+              ...(tmdbType === "movie" ? { with_genres: genreKey } : {}),
+              sort_by: "popularity.desc",
+              "vote_count.gte": "200",
+              "vote_average.gte": "7",
               ...(tmdbType === "tv"
                 ? { "first_air_date.gte": "2010-01-01" }
                 : { "primary_release_date.gte": "2010-01-01" }),
             })
         );
-
         for (const item of (data as any)?.results ?? []) {
-          if (recommendations.length >= limit) break;
+          if (addedForType >= perType) break;
           const key = `${type}:${item.id}`;
+          if (seenBoth.has(key)) continue;
           if (seenBoth.has(key)) continue;
 
           recommendations.push({
