@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { List, Content } from "@/models";
+import { IMG } from "@/lib/tmdb";
 import { getAuthUser } from "@/lib/auth";
 import { ensureContent } from "@/lib/watchLogic";
 
@@ -48,7 +49,7 @@ export async function GET(req: NextRequest, { params }: Params) {
           type: c.type,
           tmdbId: c.tmdbId ?? c.googleBooksId,
           title: c.titleTr,
-          poster: c.posterPath,
+          poster: IMG.poster(c.posterPath),
           year: c.year,
         };
       })

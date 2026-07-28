@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { List, Content } from "@/models";
+import { IMG } from "@/lib/tmdb";
 import { getAuthUser } from "@/lib/auth";
 
 /** Bir kullanıcının listeleri. userId verilmezse kendi listelerin. */
@@ -49,7 +50,9 @@ export async function GET(req: NextRequest) {
         isPublic: l.isPublic,
         itemCount: l.items.length,
         favoriteCount: l.favoriteCount,
-        covers: covers.map((c: any) => c.posterPath).filter(Boolean),
+        covers: covers
+          .map((c: any) => IMG.poster(c.posterPath))
+          .filter(Boolean),
         createdAt: l.createdAt,
       });
     }
