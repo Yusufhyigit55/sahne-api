@@ -360,3 +360,52 @@ export async function getFriendsTrending(userId: string, limit = 8) {
     })
     .filter(Boolean);
 }
+/** Takip edilenlerin açtığı son anketler (Sosyal şeridi için) */
+export async function getFriendsPolls(userId: string, limit = 10) {
+  const { Poll } = await import("@/models");
+
+  // Takip edilenler
+  const follows = await Follow.find({ followerId: userId })
+    .select("followingId")
+    .lean();
+  const followingIds = (follows as any[]).map((f) => f.followingId);
+  if (followingIds.length === 0) return [];
+
+  // Son anketler (kapalı olmayanlar öncelikli)
+  const polls = await Poll.find({
+    creatorId: { $in: followingIds },
+    isClosed: { $ne: true },
+  })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate("creatorId", "username displayName avatar")
+    .populate("contentId", "type tmdbId titleTr posterPath")
+    .lean();
+
+  return (polls as any[])
+    .map((p) => {
+      const creator = p.creatorId;
+      const content = p.contentId;
+      if (!creator || !content) return null;
+      return {
+        id: p._id.toString(),
+        question: p.question,
+        creator: {
+          username: creator.username,
+          displayName: creator.displayName,
+          avatar: creator.avatar,
+        },
+        content: {
+          type: content.type,
+          id: content.tmdbId,
+          titleTr: content.titleTr,
+          poster:
+            content.type === "book"
+              ? content.posterPath
+              : IMG.poster(content.posterPath),
+        },
+        optionCount: p.options?.length ?? 0,
+      };
+    })
+    .filter(Boolean);
+}
