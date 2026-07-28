@@ -48,6 +48,18 @@ export async function GET(req: NextRequest) {
           })
         : 0;
 
+    // Sezon bazlı izlenme kırılımı (sezon çipi renklendirme + toggle için)
+    const seasonProgress: Record<number, number> = {};
+    if (type === "series") {
+      const agg = await EpisodeWatch.aggregate([
+        { $match: { userId: content._id ? auth.userId : auth.userId, contentId: content._id } },
+        { $group: { _id: "$season", count: { $sum: 1 } } },
+      ]);
+      for (const row of agg as any[]) {
+        if (row._id != null) seasonProgress[row._id] = row.count;
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       record: record
@@ -65,6 +77,7 @@ export async function GET(req: NextRequest) {
           }
         : null,
       watchedEpisodes,
+      seasonProgress,
       totalEpisodes: content.totalEpisodes ?? 0,
     });
   } catch (err) {
