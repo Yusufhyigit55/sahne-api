@@ -1,4 +1,4 @@
-import { searchMovie, searchTv } from "@/lib/tmdb";
+import { searchMovie, searchTv, getTvDetail, getSeason } from "@/lib/tmdb";
 import { ensureContent } from "@/lib/watchLogic";
 import { WatchRecord, EpisodeWatch } from "@/models";
 
@@ -177,6 +177,43 @@ export async function resolveAndImport(
         },
         { upsert: true }
       );
+
+      // Dizi + completed → tüm yayınlanmış bölümleri EpisodeWatch'a ekle (süre/bölüm istatistiği için)
+      if (item.type === "series" && status === "completed") {
+        try {
+          const today = new Date().toISOString().slice(0, 10);
+          const detail = await getTvDetail(tmdbId);
+          const seasonNumbers = (detail.seasons ?? [])
+            .filter((s: any) => s.season_number > 0)
+            .map((s: any) => s.season_number);
+
+          for (const sn of seasonNumbers) {
+            const seasonData = await getSeason(tmdbId, sn);
+            const aired = (seasonData.episodes ?? []).filter(
+              (e: any) => e.air_date && e.air_date <= today
+            );
+            const docs = aired.map((e: any) => ({
+              userId,
+              contentId: content._id,
+              season: sn,
+              episode: e.episode_number,
+              runtime: e.runtime ?? detail.episode_run_time?.[0] ?? null,
+              watchedAt: item.watchedAt ? new Date(item.watchedAt) : new Date(),
+              isApproximateDate: true,
+            }));
+            if (docs.length) {
+              try {
+                await EpisodeWatch.insertMany(docs, { ordered: false });
+              } catch {
+                // mükerrer bölümler (unique index) atlanır — sorun değil
+              }
+            }
+          }
+        } catch (e) {
+          console.error("Bölüm import hatası (dizi):", item.title, e);
+          // Bölüm eklenemese de WatchRecord kaldı, akışı bozma
+        }
+      }
 
       report.added++;
     } catch (err) {

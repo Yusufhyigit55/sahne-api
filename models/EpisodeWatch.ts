@@ -7,6 +7,7 @@ const EpisodeWatchSchema = new Schema(
 
     season: { type: Number, required: true },
     episode: { type: Number, required: true },
+    runtime: { type: Number, default: null },
 
     watchedAt: { type: Date, default: Date.now },
     isApproximateDate: { type: Boolean, default: false },
