@@ -178,9 +178,10 @@ export function parseTracksJson(jsonText: string): ImportItem[] {
 }
 /**
  * TV TIME (dizi + film)
- * TV Time GDPR export'u CSV verir (tracking-prod-records.csv / seen_episode.csv).
- * Bölüm bazlı satırlar; biz dizi/film bazında tekilleştiririz.
- * Olası sütunlar: series_name / show_name / movie_name, type, created_at.
+ * TV Time CSV export'u. Sütunlar:
+ * type, media_type, tmdb_id, imdb_id, tvdb_id, title, year, season, episode, watched_at, rating, review
+ * media_type: "episode" (dizi bölümü) | "movie" (film). Bölüm satırları dizi bazında tekilleştirilir.
+ * tmdb_id genelde boş → eşleştirme title+year ile importLogic'te yapılır.
  */
 export function parseTVTime(csvText: string): ImportItem[] {
   const rows = parseCsv(csvText);
@@ -188,41 +189,33 @@ export function parseTVTime(csvText: string): ImportItem[] {
   const items: ImportItem[] = [];
 
   for (const row of rows) {
-    // Dizi adı çeşitli sütun adlarında olabilir
-    const seriesName =
-      row["series_name"] || row["show_name"] || row["tv_show_name"] || "";
-    const movieName = row["movie_name"] || row["film_name"] || "";
-    const genericName = row["name"] || row["title"] || "";
+    const title = (row["title"] || "").trim();
+    if (!title) continue;
 
-    let type: "series" | "movie";
-    let title: string;
+    const mediaType = (row["media_type"] || "").toLowerCase();
+    const type: "series" | "movie" =
+      mediaType === "movie" ? "movie" : "series";
 
-    if (seriesName) {
-      type = "series";
-      title = seriesName;
-    } else if (movieName) {
-      type = "movie";
-      title = movieName;
-    } else if (genericName) {
-      // type sütunu varsa ona bak, yoksa dizi varsay
-      const t = (row["type"] || "").toLowerCase();
-      type = t.includes("movie") || t.includes("film") ? "movie" : "series";
-      title = genericName;
-    } else {
-      continue;
-    }
-
-    // Aynı içeriği bir kez ekle (bölüm bazlı satırları tekilleştir)
+    // Dizi/film bazında tekilleştir
     const key = `${type}:${title.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
+    const rawRating = row["rating"] ? Number(row["rating"]) : null;
+    const rating =
+      rawRating != null && Number.isFinite(rawRating) && rawRating > 0
+        ? Math.round(rawRating)
+        : null;
+
+    const tmdbId = row["tmdb_id"] ? Number(row["tmdb_id"]) : null;
+
     items.push({
       type,
+      tmdbId: tmdbId && Number.isFinite(tmdbId) ? tmdbId : null,
       title,
-      year: toYear(row["year"] || row["release_year"]),
-      watchedAt:
-        row["created_at"] || row["watched_at"] || row["date"] || null,
+      year: toYear(row["year"]),
+      rating,
+      watchedAt: row["watched_at"] || null,
       status: "completed",
     });
   }
