@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { ensureContent } from "@/lib/watchLogic";
@@ -52,7 +53,13 @@ export async function GET(req: NextRequest) {
     const seasonProgress: Record<number, number> = {};
     if (type === "series") {
       const agg = await EpisodeWatch.aggregate([
-       { $match: { userId: auth.userId, contentId: content._id } },        { $group: { _id: "$season", count: { $sum: 1 } } },
+        {
+          $match: {
+            userId: new mongoose.Types.ObjectId(auth.userId),
+            contentId: content._id,
+          },
+        },
+        { $group: { _id: "$season", count: { $sum: 1 } } },
       ]);
       for (const row of agg as any[]) {
         if (row._id != null) seasonProgress[row._id] = row.count;
