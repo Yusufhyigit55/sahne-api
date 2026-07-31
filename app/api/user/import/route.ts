@@ -15,6 +15,10 @@ import { resolveAndImport } from "@/lib/importLogic";
 
 const MAX_ITEMS = 5000; // tek seferde işlenecek azami satır
 
+// Import çok içerik + TMDB çağrısı içerir; Vercel fonksiyon süresini uzat
+export const maxDuration = 60; // saniye (Hobby plan limiti)
+export const dynamic = "force-dynamic";
+
 export async function POST(req: NextRequest) {
   try {
     const auth = getAuthUser(req);
@@ -46,9 +50,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Ham metni ara-formata çevir
-    const items = parseBySource(source, data);
-
-    if (items.length === 0) {
+    const allItems = parseBySource(source, data);
+    if (allItems.length === 0) {
       return NextResponse.json(
         {
           error:
@@ -57,21 +60,28 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-
-    if (items.length > MAX_ITEMS) {
+    if (allItems.length > MAX_ITEMS) {
       return NextResponse.json(
         { error: `Tek seferde en fazla ${MAX_ITEMS} kayıt aktarılabilir` },
         { status: 400 }
       );
     }
 
-    await connectDB();
+    // Batch (parça parça) import: offset + limit ile sadece bir dilimi işle.
+    // Frontend, timeout olmaması için içeriği 50'şer gönderir.
+    const offset = Math.max(0, Number(body.offset ?? 0));
+    const limit = Math.max(1, Math.min(50, Number(body.limit ?? allItems.length)));
+    const slice = allItems.slice(offset, offset + limit);
 
-    const report = await resolveAndImport(auth.userId, items);
+    await connectDB();
+    const report = await resolveAndImport(auth.userId, slice);
 
     return NextResponse.json({
       ok: true,
       report,
+      total: allItems.length, // frontend kaç batch gerektiğini bilsin
+      processed: offset + slice.length, // buraya kadar işlenen
+      hasMore: offset + slice.length < allItems.length,
       message: `${report.added} kayıt eklendi, ${report.skipped} eşleşmedi, ${report.failed} hata.`,
     });
   } catch (err) {

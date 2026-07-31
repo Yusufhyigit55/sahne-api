@@ -185,42 +185,103 @@ export function parseTracksJson(jsonText: string): ImportItem[] {
  */
 export function parseTVTime(csvText: string): ImportItem[] {
   const rows = parseCsv(csvText);
-  const seen = new Set<string>();
-  const items: ImportItem[] = [];
+
+  // Filmler: direkt tekil kayıt. Diziler: bölümleri grupla.
+  const movies = new Map<string, ImportItem>();
+  const seriesMap = new Map<
+    string,
+    {
+      title: string;
+      year: number | null;
+      tmdbId: number | null;
+      rating: number | null;
+      watchedAt: string | null;
+      episodes: { season: number; episode: number }[];
+    }
+  >();
 
   for (const row of rows) {
     const title = (row["title"] || "").trim();
     if (!title) continue;
 
     const mediaType = (row["media_type"] || "").toLowerCase();
-    const type: "series" | "movie" =
-      mediaType === "movie" ? "movie" : "series";
-
-    // Dizi/film bazında tekilleştir
-    const key = `${type}:${title.toLowerCase()}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-
+    const tmdbId = row["tmdb_id"] ? Number(row["tmdb_id"]) : null;
+    const validTmdb = tmdbId && Number.isFinite(tmdbId) ? tmdbId : null;
     const rawRating = row["rating"] ? Number(row["rating"]) : null;
     const rating =
       rawRating != null && Number.isFinite(rawRating) && rawRating > 0
         ? Math.round(rawRating)
         : null;
+    const year = toYear(row["year"]);
+    const watchedAt = row["watched_at"] || null;
 
-    const tmdbId = row["tmdb_id"] ? Number(row["tmdb_id"]) : null;
+    if (mediaType === "movie") {
+      // Film: izlendiyse direkt completed
+      const key = title.toLowerCase();
+      if (!movies.has(key)) {
+        movies.set(key, {
+          type: "movie",
+          tmdbId: validTmdb,
+          title,
+          year,
+          rating,
+          watchedAt,
+          status: "completed",
+        });
+      }
+    } else {
+      // Dizi bölümü: season/episode topla
+      const season = Number(row["season"]);
+      const episode = Number(row["episode"]);
+      if (!Number.isFinite(season) || !Number.isFinite(episode)) continue;
 
+      const key = title.toLowerCase();
+      let entry = seriesMap.get(key);
+      if (!entry) {
+        entry = {
+          title,
+          year,
+          tmdbId: validTmdb,
+          rating: null,
+          watchedAt,
+          episodes: [],
+        };
+        seriesMap.set(key, entry);
+      }
+      // İzlenen bölümü ekle (mükerrer olmasın)
+      if (
+        !entry.episodes.some(
+          (e) => e.season === season && e.episode === episode
+        )
+      ) {
+        entry.episodes.push({ season, episode });
+      }
+      // Dizi puanı: satırlarda varsa ilkini al
+      if (entry.rating == null && rating != null) entry.rating = rating;
+    }
+  }
+
+  const items: ImportItem[] = [];
+
+  // Filmleri ekle
+  for (const m of movies.values()) items.push(m);
+
+  // Dizileri ekle — izlenen bölümlerle, status "watching" (import bölümlere göre karar verir)
+  for (const s of seriesMap.values()) {
     items.push({
-      type,
-      tmdbId: tmdbId && Number.isFinite(tmdbId) ? tmdbId : null,
-      title,
-      year: toYear(row["year"]),
-      rating,
-      watchedAt: row["watched_at"] || null,
-      status: "completed",
+      type: "series",
+      tmdbId: s.tmdbId,
+      title: s.title,
+      year: s.year,
+      rating: s.rating,
+      watchedAt: s.watchedAt,
+      status: "watching",
+      watchedEpisodes: s.episodes,
     });
   }
 
   return items;
+
 }
 /** Kaynak adına göre doğru parser'ı seçer */
 export function parseBySource(
@@ -236,7 +297,7 @@ export function parseBySource(
       return parseTracksJson(text);
     case "tvtime":
       return parseTVTime(text);
-    default:
+      default:
       return [];
   }
 }

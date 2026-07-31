@@ -31,6 +31,9 @@ export type ImportItem = {
   isFavorite?: boolean;
   watchedAt?: string | null; // ISO tarih
   status?: ImportStatus;
+  // Dizi için: kullanıcının izlediği belirli bölümler (TV Time gibi bölüm-bazlı kaynaklar).
+  // Doluysa import SADECE bu bölümleri işaretler; boşsa eski davranış (completed → tüm bölümler).
+  watchedEpisodes?: { season: number; episode: number }[];
 };
 
 export type ImportReport = {
@@ -178,26 +181,45 @@ export async function resolveAndImport(
         { upsert: true }
       );
 
-      // Dizi + completed → tüm yayınlanmış bölümleri EpisodeWatch'a ekle (süre/bölüm istatistiği için)
-      if (item.type === "series" && status === "completed") {
+      // DİZİ BÖLÜM İŞLEME
+      if (item.type === "series") {
         try {
           const today = new Date().toISOString().slice(0, 10);
           const detail = await getTvDetail(tmdbId);
+          const epRuntime = detail.episode_run_time?.[0] ?? null;
+
+          // Yayınlanmış tüm bölüm sayısını hesapla (durum kararı için)
           const seasonNumbers = (detail.seasons ?? [])
             .filter((s: any) => s.season_number > 0)
             .map((s: any) => s.season_number);
 
-          for (const sn of seasonNumbers) {
-            const seasonData = await getSeason(tmdbId, sn);
-            const aired = (seasonData.episodes ?? []).filter(
-              (e: any) => e.air_date && e.air_date <= today
-            );
-            const docs = aired.map((e: any) => ({
+          if (item.watchedEpisodes && item.watchedEpisodes.length > 0) {
+            // --- TV Time gibi bölüm-bazlı kaynak: SADECE izlenen bölümleri işaretle ---
+            // Runtime için sezon detaylarını çek (izlenen sezonlar yeterli)
+            const watchedSeasons = [
+              ...new Set(item.watchedEpisodes.map((e) => e.season)),
+            ];
+            const runtimeMap = new Map<string, number | null>();
+            for (const sn of watchedSeasons) {
+              try {
+                const seasonData = await getSeason(tmdbId, sn);
+                for (const e of seasonData.episodes ?? []) {
+                  runtimeMap.set(
+                    `${sn}-${e.episode_number}`,
+                    e.runtime ?? epRuntime ?? null
+                  );
+                }
+              } catch {
+                // sezon çekilemezse ortalama runtime kullanılır
+              }
+            }
+
+            const docs = item.watchedEpisodes.map((ep) => ({
               userId,
               contentId: content._id,
-              season: sn,
-              episode: e.episode_number,
-              runtime: e.runtime ?? detail.episode_run_time?.[0] ?? null,
+              season: ep.season,
+              episode: ep.episode,
+              runtime: runtimeMap.get(`${ep.season}-${ep.episode}`) ?? epRuntime ?? null,
               watchedAt: item.watchedAt ? new Date(item.watchedAt) : new Date(),
               isApproximateDate: true,
             }));
@@ -205,7 +227,52 @@ export async function resolveAndImport(
               try {
                 await EpisodeWatch.insertMany(docs, { ordered: false });
               } catch {
-                // mükerrer bölümler (unique index) atlanır — sorun değil
+                // mükerrer bölümler atlanır
+              }
+            }
+
+            // Durum kararı: tüm yayınlanmış bölümler izlendiyse completed, değilse watching
+            let totalAired = 0;
+            for (const sn of seasonNumbers) {
+              try {
+                const seasonData = await getSeason(tmdbId, sn);
+                totalAired += (seasonData.episodes ?? []).filter(
+                  (e: any) => e.air_date && e.air_date <= today
+                ).length;
+              } catch {
+                /* yoksay */
+              }
+            }
+            const finalStatus: ImportStatus =
+              totalAired > 0 && item.watchedEpisodes.length >= totalAired
+                ? "completed"
+                : "watching";
+            await WatchRecord.updateOne(
+              { userId, contentId: content._id },
+              { $set: { status: finalStatus } }
+            );
+          } else if (status === "completed") {
+            // --- Diğer kaynaklar (completed): tüm yayınlanmış bölümleri işaretle ---
+            for (const sn of seasonNumbers) {
+              const seasonData = await getSeason(tmdbId, sn);
+              const aired = (seasonData.episodes ?? []).filter(
+                (e: any) => e.air_date && e.air_date <= today
+              );
+              const docs = aired.map((e: any) => ({
+                userId,
+                contentId: content._id,
+                season: sn,
+                episode: e.episode_number,
+                runtime: e.runtime ?? epRuntime ?? null,
+                watchedAt: item.watchedAt ? new Date(item.watchedAt) : new Date(),
+                isApproximateDate: true,
+              }));
+              if (docs.length) {
+                try {
+                  await EpisodeWatch.insertMany(docs, { ordered: false });
+                } catch {
+                  // mükerrer atlanır
+                }
               }
             }
           }
